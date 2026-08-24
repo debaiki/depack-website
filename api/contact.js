@@ -2,7 +2,8 @@
 // Env: RESEND_API_KEY (required), MAIL_FROM (optional, e.g. "DEPACK <noreply@depack.co>" once domain is verified).
 
 const TO = ['info@depack.co', 'mohamed.debaiky@depack.co'];
-const FROM = () => process.env.MAIL_FROM || 'DEPACK Website <onboarding@resend.dev>';
+const FROM_MAIN = () => process.env.MAIL_FROM || 'DEPACK <noreply@depack.co>';
+const FROM_SANDBOX = 'DEPACK Website <onboarding@resend.dev>';
 const esc = s => String(s || '').slice(0, 2000)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -82,30 +83,37 @@ export default async function handler(req, res) {
     <p style="font-family:sans-serif;font-size:14px;white-space:pre-wrap">${esc(message)}</p>`;
 
   const subject = `Packaging enquiry — ${name} (${company.slice(0, 100)})`;
-  const send = to => resend({ from: FROM(), to, reply_to: email, subject, html });
+  const send = (from, to) => resend({ from, to, reply_to: email, subject, html });
 
-  let r = await send(TO);
+  // Self-activating sender chain:
+  // 1. noreply@depack.co to all recipients  — works once the domain is verified in Resend
+  // 2. sandbox sender to all recipients     — pre-verification
+  // 3. sandbox sender to the account owner  — Resend test-mode restriction
+  let r = await send(FROM_MAIN(), TO);
   let mode;
   if (!r.ok) {
-    // Resend test mode only delivers to the account owner's address —
-    // its error message contains that address, so retry there.
-    const detail = await r.text().catch(() => '');
-    console.error('resend attempt 1 failed', r.status, detail.slice(0, 300));
-    const m = detail.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g);
-    const owner = (m || []).find(a => !a.includes('resend.dev'));
-    if (owner) {
-      r = await send([owner]);
-      if (r.ok) mode = 'test-fallback';
-      else console.error('resend attempt 2 failed', r.status, await r.text().catch(() => ''));
+    console.warn('verified-domain send unavailable', r.status, (await r.text().catch(() => '')).slice(0, 200));
+    r = await send(FROM_SANDBOX, TO);
+    mode = 'sandbox';
+    if (!r.ok) {
+      const detail = await r.text().catch(() => '');
+      console.error('sandbox send failed', r.status, detail.slice(0, 300));
+      const m = detail.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g);
+      const owner = (m || []).find(a => !a.includes('resend.dev'));
+      if (owner) {
+        r = await send(FROM_SANDBOX, [owner]);
+        if (r.ok) mode = 'test-fallback';
+        else console.error('owner fallback failed', r.status, await r.text().catch(() => ''));
+      }
+      if (!r.ok) return res.status(502).json({ ok: false, error: 'send-failed' });
     }
-    if (!r.ok) return res.status(502).json({ ok: false, error: 'send-failed' });
   }
 
   // Confirmation email to the enquirer. Delivers once the domain is verified
   // (MAIL_FROM set to noreply@depack.co); in test mode Resend rejects it — ignore.
   try {
     const c = CONFIRM[b.lang] || CONFIRM.en;
-    const cr = await resend({ from: FROM(), to: [email], subject: c.subject, html: confirmHtml(c, name) });
+    const cr = await resend({ from: FROM_MAIN(), to: [email], subject: c.subject, html: confirmHtml(c, name) });
     if (!cr.ok) console.warn('confirmation skipped', cr.status);
   } catch (e) { console.warn('confirmation error', e.message); }
 
