@@ -7,6 +7,8 @@ def inl(m):
     data=base64.b64encode(open(path,'rb').read()).decode()
     return f'"data:{mt};base64,{data}"'
 out=re.sub(r'"(assets/[^"]+)"',inl,s)
+import re as _re
+out=_re.sub(r'<iframe id="mapEmbed".*?</iframe>','<div style="height:200px;display:grid;place-items:center;color:rgba(255,255,255,.5);font-weight:600">DEPACK — 10th of Ramadan City, Egypt</div>',out,flags=_re.S)
 out=out.replace('href="/depack-catalogue-2025.pdf" download','href="https://www.depack.co/depack-catalogue-2025.pdf" target="_blank" rel="noopener"')
 # artifact wrapper adds its own doctype/html/head/body — strip ours, keep <title> at top
 head=re.search(r'<head>(.*?)</head>',out,re.S).group(1)
