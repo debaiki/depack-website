@@ -36,24 +36,35 @@ export default async function handler(req, res) {
     </table>
     <p style="font-family:sans-serif;font-size:14px;white-space:pre-wrap">${esc(b.message)}</p>`;
 
-  const r = await fetch('https://api.resend.com/emails', {
+  const subject = `Packaging enquiry — ${name}${b.company ? ' (' + String(b.company).slice(0, 100) + ')' : ''}`;
+  const send = to => fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'DEPACK Website <onboarding@resend.dev>',
-      to: TO,
+      from: process.env.MAIL_FROM || 'DEPACK Website <onboarding@resend.dev>',
+      to,
       reply_to: email,
-      subject: `Packaging enquiry — ${name}${b.company ? ' (' + String(b.company).slice(0, 100) + ')' : ''}`,
+      subject,
       html,
     }),
   });
 
+  let r = await send(TO);
   if (!r.ok) {
+    // Resend test mode only delivers to the account owner's address —
+    // its error message contains that address, so retry there.
     const detail = await r.text().catch(() => '');
-    console.error('resend failed', r.status, detail.slice(0, 300));
+    console.error('resend attempt 1 failed', r.status, detail.slice(0, 300));
+    const m = detail.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g);
+    const owner = (m || []).find(a => !a.includes('resend.dev') && !TO.includes(a));
+    if (owner) {
+      r = await send([owner]);
+      if (r.ok) return res.status(200).json({ ok: true, mode: 'test-fallback' });
+      console.error('resend attempt 2 failed', r.status, await r.text().catch(() => ''));
+    }
     return res.status(502).json({ ok: false, error: 'send-failed' });
   }
   return res.status(200).json({ ok: true });
