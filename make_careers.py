@@ -15,8 +15,9 @@ s=s.replace('<link rel="alternate" hreflang="x-default" href="https://www.depack
 s=s.replace('<meta property="og:title" content="DEPACK — Packaging that makes a statement">','<meta property="og:title" content="Careers at DEPACK">')
 s=s.replace('<meta property="og:url" content="https://www.depack.co/">','<meta property="og:url" content="https://www.depack.co/careers.html">')
 
-# extract careers section
-m=re.search(r'<!-- ========== CAREERS ========== -->\s*<section id="careers">.*?</section>',s,re.S)
+# extract careers section from the existing careers page (it no longer lives in index.html)
+prev=open('careers.html',encoding='utf-8').read()
+m=re.search(r'<section id="careers">.*?</section>',prev,re.S)
 careers=m.group(0)
 
 # new main
