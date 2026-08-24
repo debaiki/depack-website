@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     const detail = await r.text().catch(() => '');
     console.error('resend attempt 1 failed', r.status, detail.slice(0, 300));
     const m = detail.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g);
-    const owner = (m || []).find(a => !a.includes('resend.dev') && !TO.includes(a));
+    const owner = (m || []).find(a => !a.includes('resend.dev'));
     if (owner) {
       r = await send([owner]);
       if (r.ok) return res.status(200).json({ ok: true, mode: 'test-fallback' });
